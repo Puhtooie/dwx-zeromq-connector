@@ -18,6 +18,11 @@
 //*implicit conversion from number to str
 //*MarketInfo -- this one I have the solution for, just hasn't been added in
 //*RefreshRates
+//
+//Url for MQL4 and MQL5 trade functions-
+//MQL4: https://docs.mql4.com/trading
+//MQL5: https://www.mql5.com/en/docs/trading
+//Also note that MQL5 has a native library include/Trade. 
 //+--------------------------------------------------------------+
 #property copyright "Copyright 2017-2019, Darwinex Labs."
 #property link      "https://www.darwinex.com/"
