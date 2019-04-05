@@ -1,14 +1,23 @@
 //+--------------------------------------------------------------+
-//|     DWX_ZeroMQ_Server_v2.0.1_RC8.mq4
-//|     @author: Darwinex Labs (www.darwinex.com)
-//|    
-//|     Copyright (c) 2017-2019, Darwinex. All rights reserved.
-//|    
-//|     Licensed under the BSD 3-Clause License, you may not use this file except 
-//|     in compliance with the License. 
-//|    
-//|     You may obtain a copy of the License at:    
-//|     https://opensource.org/licenses/BSD-3-Clause
+//This is currently my development for a MQL5 version of your code.
+//If you have any thoughts, or suggestions, on the implimentation please let me know.
+//Below if a list of functions that still have to be converted.
+//*OrderSend
+//*OrderOpenTime
+//*OrderOpenPrice
+//*OrderModify
+//*OrderStopLoss
+//*OrderTakeProfit
+//*OrderLots
+//*OrderClose
+//*OrderSelect
+//*OrderTicket
+
+//*CopyClose (1 of 3 functions)
+//*CopyTime (1 of 3 functions)
+//*implicit conversion from number to str
+//*MarketInfo -- this one I have the solution for, just hasn't been added in
+//*RefreshRates
 //+--------------------------------------------------------------+
 #property copyright "Copyright 2017-2019, Darwinex Labs."
 #property link      "https://www.darwinex.com/"
@@ -18,8 +27,23 @@
 // Required: MQL-ZMQ from https://github.com/dingmaotu/mql-zmq
 
 #include <Zmq/Zmq.mqh>
+#include <Trade/Trade.mqh>
 
-extern string PROJECT_NAME = "DWX_ZeroMQ_MT4_Server";
+#define OP_BUY 0           //Buy 
+#define OP_SELL 1          //Sell 
+#define OP_BUYLIMIT 2      //Pending order of BUY LIMIT type 
+#define OP_SELLLIMIT 3     //Pending order of SELL LIMIT type 
+#define OP_BUYSTOP 4       //Pending order of BUY STOP type 
+#define OP_SELLSTOP 5      //Pending order of SELL STOP type
+#define MODE_ASK 10
+#define MODE_BID 9
+#define SELECT_BY_POS 0
+#define SELECT_BY_TICKET 1
+#define MODE_TRADES 0
+#define MODE_POINT 11
+#define MODE_DIGITS 12
+
+extern string PROJECT_NAME = "DWX_ZeroMQ_MT5_Server";
 extern string ZEROMQ_PROTOCOL = "tcp";
 extern string HOSTNAME = "*";
 extern int PUSH_PORT = 32768;
@@ -37,18 +61,13 @@ extern bool DMA_MODE = true;
 extern string t1 = "--- ZeroMQ Configuration ---";
 extern bool Publish_MarketData = false;
 
-string Publish_Symbols[7] = {
-   "EURUSD","GBPUSD","USDJPY","USDCAD","AUDUSD","NZDUSD","USDCHF"
-};
 
-/*
 string Publish_Symbols[28] = {
    "EURUSD","EURGBP","EURAUD","EURNZD","EURJPY","EURCHF","EURCAD",
    "GBPUSD","AUDUSD","NZDUSD","USDJPY","USDCHF","USDCAD","GBPAUD",
    "GBPNZD","GBPJPY","GBPCHF","GBPCAD","AUDJPY","CHFJPY","CADJPY",
    "AUDNZD","AUDCHF","AUDCAD","NZDJPY","NZDCHF","NZDCAD","CADCHF"
 };
-*/
 
 // CREATE ZeroMQ Context
 Context context(PROJECT_NAME);
@@ -78,25 +97,35 @@ int OnInit()
    context.setBlocky(false);
    
    // Send responses to PULL_PORT that client is listening on.
-   Print("[PUSH] Binding MT4 Server to Socket on Port " + IntegerToString(PULL_PORT) + "..");
-   pushSocket.bind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PULL_PORT));
+   Print("[PUSH] Binding MT4 Server to Socket on Port " + 
+   IntegerToString(PULL_PORT) + "..");
+   
+   pushSocket.bind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME,
+    PULL_PORT));
    
    pushSocket.setSendHighWaterMark(1);
    pushSocket.setLinger(0);
    
    // Receive commands from PUSH_PORT that client is sending to.
-   Print("[PULL] Binding MT4 Server to Socket on Port " + IntegerToString(PUSH_PORT) + "..");   
-   pullSocket.bind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PUSH_PORT));
+   Print("[PULL] Binding MT4 Server to Socket on Port " + 
+   IntegerToString(PUSH_PORT) + "..");   
+
+   pullSocket.bind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, 
+   PUSH_PORT));
    
    pullSocket.setReceiveHighWaterMark(1);
    
    pullSocket.setLinger(0);
    
-   if (Publish_MarketData == TRUE)
+   if (Publish_MarketData == true)
    {
       // Send new market data to PUB_PORT that client is subscribed to.
-      Print("[PUB] Binding MT4 Server to Socket on Port " + IntegerToString(PUB_PORT) + "..");
-      pubSocket.bind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PUB_PORT));
+      Print("[PUB] Binding MT4 Server to Socket on Port " +
+       IntegerToString(PUB_PORT) + "..");
+
+      pubSocket.bind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL,
+       HOSTNAME, PUB_PORT));
+       
       pubSocket.setSendHighWaterMark(1);
       pubSocket.setLinger(0);
    }
@@ -111,16 +140,25 @@ void OnDeinit(const int reason)
 {
 //---
     
-   Print("[PUSH] Unbinding MT4 Server from Socket on Port " + IntegerToString(PULL_PORT) + "..");
-   pushSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PULL_PORT));
+   Print("[PUSH] Unbinding MT4 Server from Socket on Port " + 
+   IntegerToString(PULL_PORT) + "..");
    
-   Print("[PULL] Unbinding MT4 Server from Socket on Port " + IntegerToString(PUSH_PORT) + "..");
-   pullSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PUSH_PORT));
+   pushSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME,
+    PULL_PORT));
    
-   if (Publish_MarketData == TRUE)
+   Print("[PULL] Unbinding MT4 Server from Socket on Port " +
+    IntegerToString(PUSH_PORT) + "..");
+    
+   pullSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, 
+   PUSH_PORT));
+   
+   if (Publish_MarketData == true)
    {
-      Print("[PUB] Unbinding MT4 Server from Socket on Port " + IntegerToString(PUB_PORT) + "..");
-      pubSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PUB_PORT));
+      Print("[PUB] Unbinding MT4 Server from Socket on Port " +
+       IntegerToString(PUB_PORT) + "..");
+       
+      pubSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME,
+       PUB_PORT));
    }
    
    // Shutdown ZeroMQ Context
@@ -147,7 +185,9 @@ void OnTick()
          
          string _tick = GetBidAsk(Publish_Symbols[s]);
          Print("Sending " + Publish_Symbols[s] + " " + _tick + " to PUB Socket");
+         
          ZmqMsg reply(StringFormat("%s %s", Publish_Symbols[s], _tick));
+
          pubSocket.send(reply, true);
       }
    }
@@ -285,7 +325,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
    string zmq_ret = "";
    string ret = "";
    int ticket = -1;
-   bool ans = FALSE;
+   bool ans = false;
    
    switch(switch_action) 
    {
@@ -294,9 +334,14 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          zmq_ret = "{";
          
          // Function definition:
-         ticket = DWX_OpenOrder(compArray[3], StrToInteger(compArray[2]), StrToDouble(compArray[8]), 
-                                 StrToDouble(compArray[4]), StrToInteger(compArray[5]), StrToInteger(compArray[6]), 
-                                 compArray[7], StrToInteger(compArray[9]), zmq_ret);
+         ticket = DWX_OpenOrder(compArray[3], StringToInteger(compArray[2]),
+                                StringToDouble(compArray[8]), 
+                                StringToDouble(compArray[4]), 
+                                 StringToInteger(compArray[5]), 
+                                 StringToInteger(compArray[6]), 
+                                 compArray[7], StringToInteger(compArray[9]),
+                                  zmq_ret
+                                 );
                                  
          // Send TICKET back as JSON
          InformPullClient(pSocket, zmq_ret + "}");
@@ -308,9 +353,14 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          zmq_ret = "{'_action': 'MODIFY'";
          
          // Function definition:
-         ans = DWX_SetSLTP(StrToInteger(compArray[10]), StrToDouble(compArray[5]), StrToDouble(compArray[6]), 
-                           StrToInteger(compArray[9]), StrToInteger(compArray[2]), StrToDouble(compArray[4]), 
-                           compArray[3], 3, zmq_ret);
+         ans = DWX_SetSLTP(StringToInteger(compArray[10]),
+                           StringToDouble(compArray[5]),
+                           StringToDouble(compArray[6]), 
+                           StringToInteger(compArray[9]), 
+                           StringToInteger(compArray[2]),
+                           StringToDouble(compArray[4]), 
+                           compArray[3], 3, zmq_ret
+                           );
          
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -321,7 +371,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          zmq_ret = "{";
          
          // IMPLEMENT CLOSE TRADE LOGIC HERE
-         DWX_CloseOrder_Ticket(StrToInteger(compArray[10]), zmq_ret);
+         DWX_CloseOrder_Ticket(StringToInteger(compArray[10]), zmq_ret);
          
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -331,7 +381,8 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
       
          zmq_ret = "{";
          
-         ans = DWX_ClosePartial(StrToDouble(compArray[8]), zmq_ret, StrToInteger(compArray[10]));
+         ans = DWX_ClosePartial(StringToDouble(compArray[8]), zmq_ret,
+          StringToInteger(compArray[10]));
             
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -341,7 +392,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
       
          zmq_ret = "{";
          
-         DWX_CloseOrder_Magic(StrToInteger(compArray[9]), zmq_ret);
+         DWX_CloseOrder_Magic(StringToInteger(compArray[9]), zmq_ret);
             
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -423,14 +474,22 @@ void DWX_GetData(string& compArray[], string& zmq_ret) {
    datetime time_array[];
    
    // Get prices
-   int price_count = CopyClose(compArray[1], 
-                  StrToInteger(compArray[2]), StrToTime(compArray[3]),
-                  StrToTime(compArray[4]), price_array);
+   int price_count = CopyClose(
+                      compArray[1],
+                      StringToInteger(compArray[2]),
+                      StringToTime(compArray[3]),
+                      StringToTime(compArray[4]),
+                      price_array
+                      );
    
    // Get timestamps
-   int time_count = CopyTime(compArray[1], 
-                  StrToInteger(compArray[2]), StrToTime(compArray[3]),
-                  StrToTime(compArray[4]), time_array);
+   int time_count = CopyTime(
+                  compArray[1], 
+                  StringToInteger(compArray[2]),
+                  StringToTime(compArray[3]),
+                  StringToTime(compArray[4]),
+                  time_array
+                  );
       
    zmq_ret = zmq_ret + "'_action': 'DATA'";
                
@@ -442,9 +501,12 @@ void DWX_GetData(string& compArray[], string& zmq_ret) {
       for(int i = 0; i < price_count; i++ ) {
          
          if(i == 0)
-            zmq_ret = zmq_ret + "'" + TimeToString(time_array[i]) + "': " + DoubleToString(price_array[i]);
+            zmq_ret = zmq_ret + "'" + TimeToString(time_array[i]) + 
+            "': " + DoubleToString(price_array[i]);
+            
          else
-            zmq_ret = zmq_ret + ", '" + TimeToString(time_array[i]) + "': " + DoubleToString(price_array[i]);
+            zmq_ret = zmq_ret + ", '" + TimeToString(time_array[i]) + "': " 
+            + DoubleToString(price_array[i]);
        
       }
       
@@ -467,13 +529,16 @@ void InformPullClient(Socket& pSocket, string message) {
 }
 
 /*
- ############################################################################
- ############################################################################
- ############################################################################
+ ##############################################################################
+ ##############################################################################
+ ##############################################################################
 */
 
 // OPEN NEW ORDER
-int DWX_OpenOrder(string _symbol, int _type, double _lots, double _price, double _SL, double _TP, string _comment, int _magic, string &zmq_ret) {
+int DWX_OpenOrder(string _symbol, int _type, double _lots, 
+                  double _price, double _SL, double _TP,  
+                  string _comment, int _magic, string &zmq_ret) 
+{
    
    int ticket, error;
    
@@ -492,22 +557,29 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots, double _price, double
       sl = 0.0;
       tp = 0.0;
    } 
-   
    if(_symbol == "NULL") {
-      ticket = OrderSend(Symbol(), _type, _lots, _price, MaximumSlippage, sl, tp, _comment, _magic);
+      ticket = OrderSend(_symbol, _type, _lots, _price, MaximumSlippage, sl, 
+      tp, _comment, _magic);
+   
    } else {
-      ticket = OrderSend(_symbol, _type, _lots, _price, MaximumSlippage, sl, tp, _comment, _magic);
+      ticket = OrderSend(_symbol, _type, _lots, _price, MaximumSlippage, sl,
+       tp, _comment, _magic);
    }
    if(ticket < 0) {
       // Failure
       error = GetLastError();
-      zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(error) + "', 'response_value': '" + ErrorDescription(error) + "'";
+      zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(error) + 
+      "', 'response_value': '" + ErrorDescription(error) + "'";
+      
       return(-1*error);
    }
 
    int tmpRet = OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES);
    
-   zmq_ret = zmq_ret + ", " + "'_magic': " + IntegerToString(_magic) + ", '_ticket': " + IntegerToString(OrderTicket()) + ", '_open_time': '" + TimeToStr(OrderOpenTime(),TIME_DATE|TIME_SECONDS) + "', '_open_price': " + DoubleToString(OrderOpenPrice());
+   zmq_ret = zmq_ret + ", " + "'_magic': " + IntegerToString(_magic) +
+    ", '_ticket': " + IntegerToString(OrderGetTicket()) +
+     ", '_open_time': '" + TimeToString(OrderOpenTime(),TIME_DATE|TIME_SECONDS) + 
+     "', '_open_price': " + DoubleToString(OrderOpenPrice());
 
    if(DMA_MODE) {
    
@@ -516,12 +588,17 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots, double _price, double
          retries--;
          if(retries < 0) return(0);
          
-         if((_SL == 0 && _TP == 0) || (OrderStopLoss() == _SL && OrderTakeProfit() == _TP)) {
+         if((_SL == 0 && _TP == 0) || 
+         (OrderStopLoss() == _SL && 
+         OrderTakeProfit() == _TP)) 
+         {
             return(ticket);
          }
 
          if(DWX_IsTradeAllowed(30, zmq_ret) == 1) {
-            if(DWX_SetSLTP(ticket, _SL, _TP, _magic, _type, _price, _symbol, retries, zmq_ret)) {
+            if(DWX_SetSLTP(ticket, _SL, _TP, _magic, _type, _price, _symbol,
+             retries, zmq_ret)) 
+             {
                return(ticket);
             }
             if(retries == 0) {
@@ -545,24 +622,37 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots, double _price, double
 }
 
 // SET SL/TP
-bool DWX_SetSLTP(int ticket, double _SL, double _TP, int _magic, int _type, double _price, string _symbol, int retries, string &zmq_ret) {
+bool DWX_SetSLTP(int ticket, double _SL, double _TP, int _magic, int _type,
+ double _price, string _symbol, int retries, string &zmq_ret) 
+ {
    
    if (OrderSelect(ticket, SELECT_BY_TICKET) == true)
    {
       int dir_flag = -1;
       
-      if (OrderType() == 0 || OrderType() == 2 || OrderType() == 4)
+      if (OrderGetInteger(ORDER_TYPE) == 0 || 
+      OrderGetInteger(ORDER_TYPE) == 2 || OrderGetInteger(ORDER_TYPE) == 4)
          dir_flag = 1;
     
-      double vpoint  = MarketInfo(OrderSymbol(), MODE_POINT);
-      int    vdigits = (int)MarketInfo(OrderSymbol(), MODE_DIGITS);
+      double vpoint  = MarketInfo(OrderGetString(ORDER_SYMBOL), MODE_POINT);
+      int    vdigits = (int)MarketInfo(OrderGetString(ORDER_SYMBOL), MODE_DIGITS);
       
-      if(OrderModify(ticket, OrderOpenPrice(), NormalizeDouble(OrderOpenPrice()-_SL*dir_flag*vpoint,vdigits), NormalizeDouble(OrderOpenPrice()+_TP*dir_flag*vpoint,vdigits), 0, 0)) {
-         zmq_ret = zmq_ret + ", '_sl': " + DoubleToString(_SL) + ", '_tp': " + DoubleToString(_TP);
+      if(OrderModify(ticket, OrderOpenPrice(),
+       NormalizeDouble(OrderOpenPrice()-_SL*dir_flag*vpoint,vdigits),
+       NormalizeDouble(OrderOpenPrice()+_TP*dir_flag*vpoint,vdigits), 0, 0)) 
+       {
+         zmq_ret = zmq_ret + ", '_sl': " + DoubleToString(_SL) + 
+         ", '_tp': " + DoubleToString(_TP);
+         
          return(true);
+
       } else {
          int error = GetLastError();
-         zmq_ret = zmq_ret + ", '_response': '" + IntegerToString(error) + "', '_response_value': '" + ErrorDescription(error) + "', '_sl_attempted': " + NormalizeDouble(OrderOpenPrice()-_SL*dir_flag*vpoint,vdigits) + ", '_tp_attempted': " + NormalizeDouble(OrderOpenPrice()+_TP*dir_flag*vpoint,vdigits);
+         zmq_ret = zmq_ret + ", '_response': '" + IntegerToString(error) +
+          "', '_response_value': '" + ErrorDescription(error) + "', '_sl_attempted': " +
+           NormalizeDouble(OrderOpenPrice()-_SL*dir_flag*vpoint,vdigits) + 
+           ", '_tp_attempted': " + NormalizeDouble(
+           OrderOpenPrice()+_TP*dir_flag*vpoint,vdigits);
    
          if(retries == 0) {
             RefreshRates();
@@ -594,7 +684,8 @@ bool DWX_CloseAtMarket(double size, string &zmq_ret) {
             return(true);
          } else {
             error = GetLastError();
-            zmq_ret = zmq_ret + ", '_response': '" + IntegerToString(error) + "', '_response_value': '" + ErrorDescription(error) + "'";
+            zmq_ret = zmq_ret + ", '_response': '" + IntegerToString(error) +
+             "', '_response_value': '" + ErrorDescription(error) + "'";
          }
       }
 
@@ -609,21 +700,25 @@ bool DWX_ClosePartial(double size, string &zmq_ret, int ticket = 0) {
    RefreshRates();
    double priceCP;
    
-   bool close_ret = False;
+   bool close_ret = false;
    
-   if(OrderType() != OP_BUY && OrderType() != OP_SELL) {
+   if(OrderGetInteger(ORDER_TYPE) != OP_BUY && 
+   OrderGetInteger(ORDER_TYPE) != OP_SELL) 
+   {
      return(true);
    }
 
-   if(OrderType() == OP_BUY) {
-      priceCP = DWX_GetBid(OrderSymbol());
+   if(OrderGetInteger(ORDER_TYPE) == OP_BUY) {
+      priceCP = DWX_GetBid(OrderGetString(ORDER_SYMBOL));
    } else {
-      priceCP = DWX_GetAsk(OrderSymbol());
+      priceCP = DWX_GetAsk(OrderGetString(ORDER_SYMBOL));
    }
 
    // If the function is called directly, setup init() JSON here.
    if(ticket != 0) {
-      zmq_ret = zmq_ret + "'_action': 'CLOSE', '_ticket': " + IntegerToString(ticket);
+      zmq_ret = zmq_ret + "'_action': 'CLOSE', '_ticket': " +
+       IntegerToString(ticket);
+       
       zmq_ret = zmq_ret + ", '_response': 'CLOSE_PARTIAL'";
    }
    
@@ -632,15 +727,19 @@ bool DWX_ClosePartial(double size, string &zmq_ret, int ticket = 0) {
    if (ticket != 0)
       local_ticket = ticket;
    else
-      local_ticket = OrderTicket();
+      local_ticket = OrderGetTicket();
    
    if(size < 0.01 || size > OrderLots()) {
       close_ret = OrderClose(local_ticket, OrderLots(), priceCP, MaximumSlippage);
-      zmq_ret = zmq_ret + ", '_close_price': " + DoubleToString(priceCP) + ", '_close_lots': " + DoubleToString(OrderLots());
+      zmq_ret = zmq_ret + ", '_close_price': " + DoubleToString(priceCP) +
+       ", '_close_lots': " + DoubleToString(OrderLots());
+       
       return(close_ret);
    } else {
       close_ret = OrderClose(local_ticket, size, priceCP, MaximumSlippage);
-      zmq_ret = zmq_ret + ", '_close_price': " + DoubleToString(priceCP) + ", '_close_lots': " + DoubleToString(size);
+      zmq_ret = zmq_ret + ", '_close_price': " + DoubleToString(priceCP)
+       + ", '_close_lots': " + DoubleToString(size);
+       
       return(close_ret);
    }   
 }
@@ -656,12 +755,17 @@ void DWX_CloseOrder_Magic(int _magic, string &zmq_ret) {
    zmq_ret = zmq_ret + ", '_responses': {";
    
    for(int i=OrdersTotal()-1; i >= 0; i--) {
-      if (OrderSelect(i,SELECT_BY_POS)==true && OrderMagicNumber() == _magic) {
+      if (OrderSelect(i,SELECT_BY_POS)==true &&
+       OrderGetInteger(ORDER_MAGIC) == _magic) 
+       {
          found = true;
          
-         zmq_ret = zmq_ret + IntegerToString(OrderTicket()) + ": {'_symbol':'" + OrderSymbol() + "'";
+         zmq_ret = zmq_ret + IntegerToString(OrderGetTicket()) +
+          ": {'_symbol':'" + OrderGetString(ORDER_SYMBOL) + "'";
          
-         if(OrderType() == OP_BUY || OrderType() == OP_SELL) {
+         if(OrderGetInteger(ORDER_TYPE) == OP_BUY ||
+          OrderGetInteger(ORDER_TYPE) == OP_SELL) 
+          {
             DWX_CloseAtMarket(-1, zmq_ret);
             zmq_ret = zmq_ret + ", '_response': 'CLOSE_MARKET'";
             
@@ -678,7 +782,7 @@ void DWX_CloseOrder_Magic(int _magic, string &zmq_ret) {
             else
                zmq_ret = zmq_ret + "}";
                
-            int tmpRet = OrderDelete(OrderTicket());
+            int tmpRet = OrderDelete(OrderGetTicket());
          }
       }
    }
@@ -699,18 +803,21 @@ void DWX_CloseOrder_Ticket(int _ticket, string &zmq_ret) {
 
    bool found = false;
 
-   zmq_ret = zmq_ret + "'_action': 'CLOSE', '_ticket': " + IntegerToString(_ticket);
+   zmq_ret = zmq_ret + "'_action': 'CLOSE', '_ticket': " + 
+   IntegerToString(_ticket);
 
    for(int i=0; i<OrdersTotal(); i++) {
-      if (OrderSelect(i,SELECT_BY_POS)==true && OrderTicket() == _ticket) {
+      if (OrderSelect(i,SELECT_BY_POS)==true && OrderGetTicket() == _ticket) {
          found = true;
 
-         if(OrderType() == OP_BUY || OrderType() == OP_SELL) {
+         int orderType = orderType();
+         
+         if(orderType == OP_BUY || OrderGetInteger(ORDER_TYPE) == OP_SELL) {
             DWX_CloseAtMarket(-1, zmq_ret);
             zmq_ret = zmq_ret + ", '_response': 'CLOSE_MARKET'";
          } else {
             zmq_ret = zmq_ret + ", '_response': 'CLOSE_PENDING'";
-            int tmpRet = OrderDelete(OrderTicket());
+            int tmpRet = OrderDelete(OrderGetTicket());
          }
       }
    }
@@ -734,13 +841,19 @@ void DWX_CloseAllOrders(string &zmq_ret) {
    zmq_ret = zmq_ret + ", '_responses': {";
    
    for(int i=OrdersTotal()-1; i >= 0; i--) {
+   
       if (OrderSelect(i,SELECT_BY_POS)==true) {
       
          found = true;
          
-         zmq_ret = zmq_ret + IntegerToString(OrderTicket()) + ": {'_symbol':'" + OrderSymbol() + "', '_magic': " + IntegerToString(OrderMagicNumber());
+         zmq_ret = zmq_ret + IntegerToString(OrderGetTicket()) +
+           ": {'_symbol':'" +
+           OrderGetString(ORDER_SYMBOL) + "', '_magic': " +
+           IntegerToString(OrderGetInteger(ORDER_MAGIC));
          
-         if(OrderType() == OP_BUY || OrderType() == OP_SELL) {
+         if( OrderGetInteger(ORDER_TYPE) == OP_BUY || 
+         OrderGetInteger(ORDER_TYPE)== OP_SELL ) 
+         {
             DWX_CloseAtMarket(-1, zmq_ret);
             zmq_ret = zmq_ret + ", '_response': 'CLOSE_MARKET'";
             
@@ -757,11 +870,11 @@ void DWX_CloseAllOrders(string &zmq_ret) {
             else
                zmq_ret = zmq_ret + "}";
                
-            int tmpRet = OrderDelete(OrderTicket());
+            int tmpRet = OrderDelete(OrderGetTicket());
          }
       }
    }
-
+}
    zmq_ret = zmq_ret + "}";
    
    if(found == false) {
@@ -784,11 +897,21 @@ void DWX_GetOpenOrders(string &zmq_ret) {
    for(int i=OrdersTotal()-1; i>=0; i--) {
       found = true;
       
-      if (OrderSelect(i,SELECT_BY_POS)==true) {
+      if (OrderSelect(i,SELECT_BY_POS) == true) {
       
-         zmq_ret = zmq_ret + IntegerToString(OrderTicket()) + ": {";
+         zmq_ret = zmq_ret + IntegerToString(OrderGetTicket()) + ": {";
          
-         zmq_ret = zmq_ret + "'_magic': " + IntegerToString(OrderMagicNumber()) + ", '_symbol': '" + OrderSymbol() + "', '_lots': " + DoubleToString(OrderLots()) + ", '_type': " + IntegerToString(OrderType()) + ", '_open_price': " + DoubleToString(OrderOpenPrice()) + ", '_open_time': '" + TimeToStr(OrderOpenTime(),TIME_DATE|TIME_SECONDS) + "', '_SL': " + DoubleToString(OrderStopLoss()) + ", '_TP': " + DoubleToString(OrderTakeProfit()) + ", '_pnl': " + DoubleToString(OrderProfit()) + ", '_comment': '" + OrderComment() + "'";
+         zmq_ret = zmq_ret + "'_magic': " + 
+           IntegerToString(OrderGetInteger(ORDER_MAGIC)) +
+           ", '_symbol': '" + OrderGetString(ORDER_SYMBOL) +
+           "', '_lots': " + DoubleToString(OrderLots()) + ", '_type': " +
+           IntegerToString(OrderGetInteger(ORDER_TYPE)) + 
+           ", '_open_price': " + DoubleToString(OrderOpenPrice()) +
+           ", '_open_time': '" + TimeToString(OrderOpenTime(),TIME_DATE|TIME_SECONDS) + 
+           "', '_SL': " + DoubleToString(OrderStopLoss()) + ", '_TP': " +
+           DoubleToString(OrderTakeProfit()) + ", '_pnl': " +
+           DoubleToString(OrderProfit()) + ", '_comment': '" +
+           OrderGetString(ORDER_COMMENT) + "'";
          
          if (i != 0)
             zmq_ret = zmq_ret + "}, ";
@@ -817,7 +940,10 @@ int DWX_IsTradeAllowed(int MaxWaiting_sec, string &zmq_ret) {
             
             int diff = (int)(GetTickCount() - StartWaitingTime);
             if(diff > MaxWaiting_sec * 1000) {
-                zmq_ret = zmq_ret + ", '_response': 'WAIT_LIMIT_EXCEEDED', '_response_value': " + IntegerToString(MaxWaiting_sec);
+                
+                zmq_ret = zmq_ret + ", '_response': 'WAIT_LIMIT_EXCEEDED', '_response_value': " 
+                + IntegerToString(MaxWaiting_sec);
+                
                 return(-2);
             }
             // if the trade context has become free,
