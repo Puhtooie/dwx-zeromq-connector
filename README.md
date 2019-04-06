@@ -4,7 +4,8 @@ This patch has been opened to share progress on an attempt to make MQL5 compatib
 The build is not passing, and should be treated accordingly.
 
 currently, you should build the api as instructed in Master, but with MQL5 versions of the code (can all be found in the same resources listed in Master.README)
-You should also add MarketInfoMQL4.mqh to the include folder.
+
+You should also add DWX to the include folder. The origional code has been broken up into 5 files in there and then executed in the DWX_SERVER file.
 
 ## License
 
