@@ -2,21 +2,16 @@
 //This is currently my development for a MQL5 version of your code.
 //If you have any thoughts, or suggestions, on the implimentation please let me know.
 //Below if a list of functions that still have to be converted.
+//
 //*OrderSend
-//*OrderOpenTime
-//*OrderOpenPrice
 //*OrderModify
-//*OrderStopLoss
-//*OrderTakeProfit
-//*OrderLots
 //*OrderClose
-//*OrderSelect
-//*OrderTicket
+//*OrderDelete
+//*ASK
+//*BID
 
 //*CopyClose (1 of 3 functions)
 //*CopyTime (1 of 3 functions)
-//*implicit conversion from number to str
-//*MarketInfo -- this one I have the solution for, just hasn't been added in
 //*RefreshRates
 //
 //Url for MQL4 and MQL5 trade functions-
@@ -33,6 +28,7 @@
 
 #include <Zmq/Zmq.mqh>
 #include <Trade/Trade.mqh>
+#include <MarketInfoMQL4.mqh>
 
 #define OP_BUY 0           //Buy 
 #define OP_SELL 1          //Sell 
@@ -327,17 +323,16 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
    if(compArray[0] == "DATA")
       switch_action = 8;
    
-   string zmq_ret = "";
-   string ret = "";
+   string zmq_ret;
+   string ret;
    int ticket = -1;
    bool ans = false;
+   zmq_ret = "{";
    
    switch(switch_action) 
    {
       case 1: // OPEN TRADE
-         
-         zmq_ret = "{";
-         
+                  
          // Function definition:
          ticket = DWX_OpenOrder(compArray[3], StringToInteger(compArray[2]),
                                 StringToDouble(compArray[8]), 
@@ -355,7 +350,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 2: // MODIFY SL/TP
       
-         zmq_ret = "{'_action': 'MODIFY'";
+         zmq_ret += "'_action': 'MODIFY'";
          
          // Function definition:
          ans = DWX_SetSLTP(StringToInteger(compArray[10]),
@@ -373,7 +368,6 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 3: // CLOSE TRADE
       
-         zmq_ret = "{";
          
          // IMPLEMENT CLOSE TRADE LOGIC HERE
          DWX_CloseOrder_Ticket(StringToInteger(compArray[10]), zmq_ret);
@@ -384,7 +378,6 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
       
       case 4: // CLOSE PARTIAL
       
-         zmq_ret = "{";
          
          ans = DWX_ClosePartial(StringToDouble(compArray[8]), zmq_ret,
           StringToInteger(compArray[10]));
@@ -394,9 +387,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          break;
          
       case 5: // CLOSE MAGIC
-      
-         zmq_ret = "{";
-         
+               
          DWX_CloseOrder_Magic(StringToInteger(compArray[9]), zmq_ret);
             
          InformPullClient(pSocket, zmq_ret + "}");
@@ -405,7 +396,6 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 6: // CLOSE ALL ORDERS
       
-         zmq_ret = "{";
          
          DWX_CloseAllOrders(zmq_ret);
             
@@ -414,9 +404,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          break;
       
       case 7: // GET OPEN ORDERS
-      
-         zmq_ret = "{";
-         
+               
          DWX_GetOpenOrders(zmq_ret);
             
          InformPullClient(pSocket, zmq_ret + "}");
@@ -424,9 +412,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          break;
             
       case 8: // DATA REQUEST
-         
-         zmq_ret = "{";
-         
+           
          DWX_GetData(compArray, zmq_ret);
          
          InformPullClient(pSocket, zmq_ret + "}");
@@ -496,30 +482,30 @@ void DWX_GetData(string& compArray[], string& zmq_ret) {
                   time_array
                   );
       
-   zmq_ret = zmq_ret + "'_action': 'DATA'";
+   zmq_ret += "'_action': 'DATA'";
                
    if (price_count > 0) {
       
-      zmq_ret = zmq_ret + ", '_data': {";
+      zmq_ret += ", '_data': {";
       
       // Construct string of price|price|price|.. etc and send to PULL client.
       for(int i = 0; i < price_count; i++ ) {
          
          if(i == 0)
-            zmq_ret = zmq_ret + "'" + TimeToString(time_array[i]) + 
+            zmq_ret += "'" + TimeToString(time_array[i]) + 
             "': " + DoubleToString(price_array[i]);
             
          else
-            zmq_ret = zmq_ret + ", '" + TimeToString(time_array[i]) + "': " 
+            zmq_ret += ", '" + TimeToString(time_array[i]) + "': " 
             + DoubleToString(price_array[i]);
        
       }
       
-      zmq_ret = zmq_ret + "}";
+      zmq_ret += "}";
       
    }
    else {
-      zmq_ret = zmq_ret + ", " + "'_response': 'NOT_AVAILABLE'";
+      zmq_ret += ", " + "'_response': 'NOT_AVAILABLE'";
    }
          
 }
@@ -547,10 +533,10 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots,
    
    int ticket, error;
    
-   zmq_ret = zmq_ret + "'_action': 'EXECUTION'";
+   zmq_ret += "'_action': 'EXECUTION'";
    
    if(_lots > MaximumLotSize) {
-      zmq_ret = zmq_ret + ", " + "'_response': 'LOT_SIZE_ERROR', 'response_value': 'MAX_LOT_SIZE_EXCEEDED'";
+      zmq_ret += ", " + "'_response': 'LOT_SIZE_ERROR', 'response_value': 'MAX_LOT_SIZE_EXCEEDED'";
       return(-1);
    }
    
@@ -568,12 +554,12 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots,
    
    } else {
       ticket = OrderSend(_symbol, _type, _lots, _price, MaximumSlippage, sl,
-       tp, _comment, _magic);
+                         tp, _comment, _magic);
    }
    if(ticket < 0) {
       // Failure
       error = GetLastError();
-      zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(error) + 
+      zmq_ret += ", " + "'_response': '" + IntegerToString(error) + 
       "', 'response_value': '" + ErrorDescription(error) + "'";
       
       return(-1*error);
@@ -581,10 +567,10 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots,
 
    int tmpRet = OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES);
    
-   zmq_ret = zmq_ret + ", " + "'_magic': " + IntegerToString(_magic) +
-    ", '_ticket': " + IntegerToString(OrderGetTicket()) +
-     ", '_open_time': '" + TimeToString(OrderOpenTime(),TIME_DATE|TIME_SECONDS) + 
-     "', '_open_price': " + DoubleToString(OrderOpenPrice());
+   zmq_ret += ", " + "'_magic': " + IntegerToString(_magic) +
+    ", '_ticket': " + IntegerToString(OrderGetInteger(ORDER_TICKET)) +
+     ", '_open_time': '" + TimeToString(OrderGetInteger(ORDER_TIME_DONE),TIME_DATE|TIME_SECONDS) + 
+     "', '_open_price': " + DoubleToString(OrderGetDouble(ORDER_PRICE_OPEN));
 
    if(DMA_MODE) {
    
@@ -594,8 +580,8 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots,
          if(retries < 0) return(0);
          
          if((_SL == 0 && _TP == 0) || 
-         (OrderStopLoss() == _SL && 
-         OrderTakeProfit() == _TP)) 
+         (OrderGetDouble(ORDER_SL) == _SL && 
+         OrderGetDouble(ORDER_TP) == _TP)) 
          {
             return(ticket);
          }
@@ -607,7 +593,7 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots,
                return(ticket);
             }
             if(retries == 0) {
-               zmq_ret = zmq_ret + ", '_response': 'ERROR_SETTING_SL_TP'";
+               zmq_ret += ", '_response': 'ERROR_SETTING_SL_TP'";
                return(-11111);
             }
          }
@@ -615,13 +601,12 @@ int DWX_OpenOrder(string _symbol, int _type, double _lots,
          Sleep(MILLISECOND_TIMER);
       }
 
-      zmq_ret = zmq_ret + ", '_response': 'ERROR_SETTING_SL_TP'";
-      zmq_ret = zmq_ret + "}";
+      zmq_ret += ", '_response': 'ERROR_SETTING_SL_TP'}";
       return(-1);
    }
 
     // Send zmq_ret to Python Client
-    zmq_ret = zmq_ret + "}";
+    zmq_ret += "}";
     
    return(ticket);
 }
@@ -638,26 +623,26 @@ bool DWX_SetSLTP(int ticket, double _SL, double _TP, int _magic, int _type,
       if (OrderGetInteger(ORDER_TYPE) == 0 || 
       OrderGetInteger(ORDER_TYPE) == 2 || OrderGetInteger(ORDER_TYPE) == 4)
          dir_flag = 1;
-    
-      double vpoint  = MarketInfo(OrderGetString(ORDER_SYMBOL), MODE_POINT);
-      int    vdigits = (int)MarketInfo(OrderGetString(ORDER_SYMBOL), MODE_DIGITS);
+
+      double vpoint  = MarketInfoMQL4(OrderGetString(ORDER_SYMBOL), MODE_POINT);
+      int    vdigits = (int)MarketInfoMQL4(OrderGetString(ORDER_SYMBOL), MODE_DIGITS);
       
-      if(OrderModify(ticket, OrderOpenPrice(),
-       NormalizeDouble(OrderOpenPrice()-_SL*dir_flag*vpoint,vdigits),
-       NormalizeDouble(OrderOpenPrice()+_TP*dir_flag*vpoint,vdigits), 0, 0)) 
+      if(OrderModify(ticket, OrderGetDouble(ORDER_PRICE_OPEN),
+       NormalizeDouble(OrderGetDouble(ORDER_PRICE_OPEN)-_SL*dir_flag*vpoint,vdigits),
+       NormalizeDouble(OrderGetDouble(ORDER_PRICE_OPEN)+_TP*dir_flag*vpoint,vdigits), 0, 0)) 
        {
-         zmq_ret = zmq_ret + ", '_sl': " + DoubleToString(_SL) + 
+         zmq_ret += ", '_sl': " + DoubleToString(_SL) + 
          ", '_tp': " + DoubleToString(_TP);
          
          return(true);
 
       } else {
          int error = GetLastError();
-         zmq_ret = zmq_ret + ", '_response': '" + IntegerToString(error) +
+         zmq_ret += ", '_response': '" + IntegerToString(error) +
           "', '_response_value': '" + ErrorDescription(error) + "', '_sl_attempted': " +
-           NormalizeDouble(OrderOpenPrice()-_SL*dir_flag*vpoint,vdigits) + 
+           NormalizeDouble(OrderGetDouble(ORDER_PRICE_OPEN)-_SL*dir_flag*vpoint,vdigits) + 
            ", '_tp_attempted': " + NormalizeDouble(
-           OrderOpenPrice()+_TP*dir_flag*vpoint,vdigits);
+           OrderGetDouble(ORDER_PRICE_OPEN)+_TP*dir_flag*vpoint,vdigits);
    
          if(retries == 0) {
             RefreshRates();
@@ -689,7 +674,7 @@ bool DWX_CloseAtMarket(double size, string &zmq_ret) {
             return(true);
          } else {
             error = GetLastError();
-            zmq_ret = zmq_ret + ", '_response': '" + IntegerToString(error) +
+            zmq_ret += ", '_response': '" + IntegerToString(error) +
              "', '_response_value': '" + ErrorDescription(error) + "'";
          }
       }
@@ -721,10 +706,10 @@ bool DWX_ClosePartial(double size, string &zmq_ret, int ticket = 0) {
 
    // If the function is called directly, setup init() JSON here.
    if(ticket != 0) {
-      zmq_ret = zmq_ret + "'_action': 'CLOSE', '_ticket': " +
+      zmq_ret += "'_action': 'CLOSE', '_ticket': " +
        IntegerToString(ticket);
        
-      zmq_ret = zmq_ret + ", '_response': 'CLOSE_PARTIAL'";
+      zmq_ret += ", '_response': 'CLOSE_PARTIAL'";
    }
    
    int local_ticket = 0;
@@ -732,17 +717,17 @@ bool DWX_ClosePartial(double size, string &zmq_ret, int ticket = 0) {
    if (ticket != 0)
       local_ticket = ticket;
    else
-      local_ticket = OrderGetTicket();
+      local_ticket = OrderGetInteger(ORDER_TICKET);
    
-   if(size < 0.01 || size > OrderLots()) {
-      close_ret = OrderClose(local_ticket, OrderLots(), priceCP, MaximumSlippage);
-      zmq_ret = zmq_ret + ", '_close_price': " + DoubleToString(priceCP) +
-       ", '_close_lots': " + DoubleToString(OrderLots());
+   if(size < 0.01 || size > OrderGetDouble(ORDER_VOLUME_CURRENT)) {
+      close_ret = OrderClose(local_ticket, OrderGetDouble(ORDER_VOLUME_CURRENT), priceCP, MaximumSlippage);
+      zmq_ret += ", '_close_price': " + DoubleToString(priceCP) +
+       ", '_close_lots': " + DoubleToString(OrderGetDouble(ORDER_VOLUME_CURRENT));
        
       return(close_ret);
    } else {
       close_ret = OrderClose(local_ticket, size, priceCP, MaximumSlippage);
-      zmq_ret = zmq_ret + ", '_close_price': " + DoubleToString(priceCP)
+      zmq_ret += ", '_close_price': " + DoubleToString(priceCP)
        + ", '_close_lots': " + DoubleToString(size);
        
       return(close_ret);
@@ -754,10 +739,10 @@ void DWX_CloseOrder_Magic(int _magic, string &zmq_ret) {
 
    bool found = false;
 
-   zmq_ret = zmq_ret + "'_action': 'CLOSE_ALL_MAGIC'";
-   zmq_ret = zmq_ret + ", '_magic': " + IntegerToString(_magic);
+   zmq_ret += "'_action': 'CLOSE_ALL_MAGIC'";
+   zmq_ret += ", '_magic': " + IntegerToString(_magic);
    
-   zmq_ret = zmq_ret + ", '_responses': {";
+   zmq_ret += ", '_responses': {";
    
    for(int i=OrdersTotal()-1; i >= 0; i--) {
       if (OrderSelect(i,SELECT_BY_POS)==true &&
@@ -765,29 +750,29 @@ void DWX_CloseOrder_Magic(int _magic, string &zmq_ret) {
        {
          found = true;
          
-         zmq_ret = zmq_ret + IntegerToString(OrderGetTicket()) +
+         zmq_ret += IntegerToString(OrderGetInteger(ORDER_TICKET)) +
           ": {'_symbol':'" + OrderGetString(ORDER_SYMBOL) + "'";
          
          if(OrderGetInteger(ORDER_TYPE) == OP_BUY ||
           OrderGetInteger(ORDER_TYPE) == OP_SELL) 
           {
             DWX_CloseAtMarket(-1, zmq_ret);
-            zmq_ret = zmq_ret + ", '_response': 'CLOSE_MARKET'";
+            zmq_ret += ", '_response': 'CLOSE_MARKET'";
             
             if (i != 0)
-               zmq_ret = zmq_ret + "}, ";
+               zmq_ret += "}, ";
             else
-               zmq_ret = zmq_ret + "}";
+               zmq_ret += "}";
                
          } else {
-            zmq_ret = zmq_ret + ", '_response': 'CLOSE_PENDING'";
+            zmq_ret += ", '_response': 'CLOSE_PENDING'";
             
             if (i != 0)
-               zmq_ret = zmq_ret + "}, ";
+               zmq_ret += "}, ";
             else
-               zmq_ret = zmq_ret + "}";
+               zmq_ret += "}";
                
-            int tmpRet = OrderDelete(OrderGetTicket());
+            int tmpRet = OrderDelete(OrderGetInteger(ORDER_TICKET));
          }
       }
    }
@@ -795,10 +780,10 @@ void DWX_CloseOrder_Magic(int _magic, string &zmq_ret) {
    zmq_ret = zmq_ret + "}";
    
    if(found == false) {
-      zmq_ret = zmq_ret + ", '_response': 'NOT_FOUND'";
+      zmq_ret += ", '_response': 'NOT_FOUND'";
    }
    else {
-      zmq_ret = zmq_ret + ", '_response_value': 'SUCCESS'";
+      zmq_ret += ", '_response_value': 'SUCCESS'";
    }
 
 }
@@ -808,30 +793,30 @@ void DWX_CloseOrder_Ticket(int _ticket, string &zmq_ret) {
 
    bool found = false;
 
-   zmq_ret = zmq_ret + "'_action': 'CLOSE', '_ticket': " + 
+   zmq_ret += "'_action': 'CLOSE', '_ticket': " + 
    IntegerToString(_ticket);
 
    for(int i=0; i<OrdersTotal(); i++) {
-      if (OrderSelect(i,SELECT_BY_POS)==true && OrderGetTicket() == _ticket) {
+      if (OrderSelect(i,SELECT_BY_POS)==true && OrderGetInteger(ORDER_TICKET) == _ticket) {
          found = true;
 
-         int orderType = orderType();
+         int orderType = OrderGetInteger(ORDER_TYPE);
          
          if(orderType == OP_BUY || OrderGetInteger(ORDER_TYPE) == OP_SELL) {
             DWX_CloseAtMarket(-1, zmq_ret);
-            zmq_ret = zmq_ret + ", '_response': 'CLOSE_MARKET'";
+            zmq_ret += ", '_response': 'CLOSE_MARKET'";
          } else {
-            zmq_ret = zmq_ret + ", '_response': 'CLOSE_PENDING'";
-            int tmpRet = OrderDelete(OrderGetTicket());
+            zmq_ret += ", '_response': 'CLOSE_PENDING'";
+            int tmpRet = OrderDelete(OrderGetInteger(ORDER_TICKET));
          }
       }
    }
 
    if(found == false) {
-      zmq_ret = zmq_ret + ", '_response': 'NOT_FOUND'";
+      zmq_ret += ", '_response': 'NOT_FOUND'";
    }
    else {
-      zmq_ret = zmq_ret + ", '_response_value': 'SUCCESS'";
+      zmq_ret += ", '_response_value': 'SUCCESS'";
    }
 
 }
@@ -841,9 +826,9 @@ void DWX_CloseAllOrders(string &zmq_ret) {
 
    bool found = false;
 
-   zmq_ret = zmq_ret + "'_action': 'CLOSE_ALL'";
+   zmq_ret += "'_action': 'CLOSE_ALL'";
    
-   zmq_ret = zmq_ret + ", '_responses': {";
+   zmq_ret += ", '_responses': {";
    
    for(int i=OrdersTotal()-1; i >= 0; i--) {
    
@@ -851,7 +836,7 @@ void DWX_CloseAllOrders(string &zmq_ret) {
       
          found = true;
          
-         zmq_ret = zmq_ret + IntegerToString(OrderGetTicket()) +
+         zmq_ret += IntegerToString(OrderGetInteger(ORDER_TICKET)) +
            ": {'_symbol':'" +
            OrderGetString(ORDER_SYMBOL) + "', '_magic': " +
            IntegerToString(OrderGetInteger(ORDER_MAGIC));
@@ -860,33 +845,33 @@ void DWX_CloseAllOrders(string &zmq_ret) {
          OrderGetInteger(ORDER_TYPE)== OP_SELL ) 
          {
             DWX_CloseAtMarket(-1, zmq_ret);
-            zmq_ret = zmq_ret + ", '_response': 'CLOSE_MARKET'";
+            zmq_ret += ", '_response': 'CLOSE_MARKET'";
             
             if (i != 0)
-               zmq_ret = zmq_ret + "}, ";
+               zmq_ret += "}, ";
             else
-               zmq_ret = zmq_ret + "}";
+               zmq_ret += "}";
                
          } else {
-            zmq_ret = zmq_ret + ", '_response': 'CLOSE_PENDING'";
+            zmq_ret += ", '_response': 'CLOSE_PENDING'";
             
             if (i != 0)
-               zmq_ret = zmq_ret + "}, ";
+               zmq_ret += "}, ";
             else
-               zmq_ret = zmq_ret + "}";
+               zmq_ret += "}";
                
-            int tmpRet = OrderDelete(OrderGetTicket());
+            int tmpRet = OrderDelete(OrderGetInteger(ORDER_TICKET));
          }
       }
    }
-}
-   zmq_ret = zmq_ret + "}";
+   
+   zmq_ret += "}";
    
    if(found == false) {
-      zmq_ret = zmq_ret + ", '_response': 'NOT_FOUND'";
+      zmq_ret += ", '_response': 'NOT_FOUND'";
    }
    else {
-      zmq_ret = zmq_ret + ", '_response_value': 'SUCCESS'";
+      zmq_ret += ", '_response_value': 'SUCCESS'";
    }
 
 }
@@ -896,64 +881,64 @@ void DWX_GetOpenOrders(string &zmq_ret) {
 
    bool found = false;
 
-   zmq_ret = zmq_ret + "'_action': 'OPEN_TRADES'";
-   zmq_ret = zmq_ret + ", '_trades': {";
+   zmq_ret += "'_action': 'OPEN_TRADES'";
+   zmq_ret += ", '_trades': {";
    
    for(int i=OrdersTotal()-1; i>=0; i--) {
       found = true;
       
       if (OrderSelect(i,SELECT_BY_POS) == true) {
       
-         zmq_ret = zmq_ret + IntegerToString(OrderGetTicket()) + ": {";
+         zmq_ret += IntegerToString(PositionGetInteger(POSITION_TICKET)) + ": {";
          
-         zmq_ret = zmq_ret + "'_magic': " + 
-           IntegerToString(OrderGetInteger(ORDER_MAGIC)) +
-           ", '_symbol': '" + OrderGetString(ORDER_SYMBOL) +
-           "', '_lots': " + DoubleToString(OrderLots()) + ", '_type': " +
-           IntegerToString(OrderGetInteger(ORDER_TYPE)) + 
-           ", '_open_price': " + DoubleToString(OrderOpenPrice()) +
-           ", '_open_time': '" + TimeToString(OrderOpenTime(),TIME_DATE|TIME_SECONDS) + 
-           "', '_SL': " + DoubleToString(OrderStopLoss()) + ", '_TP': " +
-           DoubleToString(OrderTakeProfit()) + ", '_pnl': " +
-           DoubleToString(OrderProfit()) + ", '_comment': '" +
-           OrderGetString(ORDER_COMMENT) + "'";
+         zmq_ret += "'_magic': " + IntegerToString(PositionGetInteger(POSITION_MAGIC)) +
+           ", '_symbol': '" + PositionGetString(POSITION_SYMBOL) +
+           "', '_lots': " + DoubleToString(PositionGetDouble(POSITION_VOLUME)) +
+            ", '_type': " + IntegerToString(PositionGetInteger(POSITION_TYPE)) + 
+           ", '_open_price': " + DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN)) +
+           ", '_open_time': '" + TimeToString(OrderGetInteger(ORDER_TIME_DONE)
+                                                     ,TIME_DATE|TIME_SECONDS) + 
+           "', '_SL': " + DoubleToString(PositionGetDouble(POSITION_SL)) + 
+           ", '_TP': " + DoubleToString(PositionGetDouble(POSITION_TP) + 
+           ", '_pnl': " + DoubleToString(PositionGetDouble(POSITION_PROFIT)) +
+            ", '_comment': '" + PositionGetString(POSITION_COMMENT) + "'";
          
          if (i != 0)
-            zmq_ret = zmq_ret + "}, ";
+            zmq_ret += "}, ";
          else
-            zmq_ret = zmq_ret + "}";
+            zmq_ret += "}";
       }
    }
-   zmq_ret = zmq_ret + "}";
+   zmq_ret += "}";
 
 }
 
 // CHECK IF TRADE IS ALLOWED
 int DWX_IsTradeAllowed(int MaxWaiting_sec, string &zmq_ret) {
     
-    if(!IsTradeAllowed()) {
+    if(!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)) {
     
         int StartWaitingTime = (int)GetTickCount();
-        zmq_ret = zmq_ret + ", " + "'_response': 'TRADE_CONTEXT_BUSY'";
+        zmq_ret += ", " + "'_response': 'TRADE_CONTEXT_BUSY'";
         
         while(true) {
             
             if(IsStopped()) {
-                zmq_ret = zmq_ret + ", " + "'_response_value': 'EA_STOPPED_BY_USER'";
+                zmq_ret += ", " + "'_response_value': 'EA_STOPPED_BY_USER'";
                 return(-1);
             }
             
             int diff = (int)(GetTickCount() - StartWaitingTime);
             if(diff > MaxWaiting_sec * 1000) {
                 
-                zmq_ret = zmq_ret + ", '_response': 'WAIT_LIMIT_EXCEEDED', '_response_value': " 
+                zmq_ret += ", '_response': 'WAIT_LIMIT_EXCEEDED', '_response_value': " 
                 + IntegerToString(MaxWaiting_sec);
                 
                 return(-2);
             }
             // if the trade context has become free,
-            if(IsTradeAllowed()) {
-                zmq_ret = zmq_ret + ", '_response': 'TRADE_CONTEXT_NOW_FREE'";
+            if(AccountInfoInteger(ACCOUNT_TRADE_ALLOWED)) {
+                zmq_ret += ", '_response': 'TRADE_CONTEXT_NOW_FREE'";
                 RefreshRates();
                 return(1);
             }
@@ -1078,7 +1063,7 @@ double DWX_GetAsk(string symbol) {
    if(symbol == "NULL") {
       return(Ask);
    } else {
-      return(MarketInfo(symbol,MODE_ASK));
+      return(MarketInfoMQL4(symbol,MODE_ASK));
    }
 }
 
@@ -1088,7 +1073,7 @@ double DWX_GetBid(string symbol) {
    if(symbol == "NULL") {
       return(Bid);
    } else {
-      return(MarketInfo(symbol,MODE_BID));
+      return(MarketInfoMQL4(symbol,MODE_BID));
    }
 }
 //+------------------------------------------------------------------+
