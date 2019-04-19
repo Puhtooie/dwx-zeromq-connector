@@ -175,41 +175,40 @@ class DWX_ZeroMQ_Connector():
     """
     functionto build pandas dfs and hdf5 database after importing csv files
     """
-    
-    def _MT_HISTORY_IO(self, _filename = "File path\\{}{}.csv", #{} 1 = _symbol {}2 = _timeframe
-                    _symbol = 'EURUSD',
-                    _timeframe = '60',  # Timeframe in minutes, e.g. H1 = 60, M1 = 1, etc
-                    _verbose = False,
-                    _db = False):
 
-        if _filename == None:
+                                 #{} 1 = _symbol {}2 = _timeframe
+    def _MT_HISTORY_IO(_filename= "FILEPATH\\{}{}.csv", 
+                   _symbol='EURUSD',
+                   _timeframe='60',  # Timeframe in minutes, e.g. H1 = 60, M1 = 1, etc
+                   _verbose=False,
+                   _db=False,
+                   db_name='filepath'):
+        
+        if _filename is None:
             print('[ERROR] Invalid filename!')
             quit()
 
-
-        _df = pd.read_csv(_filename.format(_symbol, _timeframe), 
-                      names = ['drop', 'Open', 'High', 'Low', 'Close','Volume'],
-                      na_values='00:00',
-                      infer_datetime_format = True
-                      ).dropna(axis='columns', how='all')
-
+        _df = pd.read_csv(_filename.format(_symbol, _timeframe),
+                          names=['drop', 'Open', 'High', 'Low', 'Close', 'Volume'],
+                          na_values='00:00',
+                          infer_datetime_format=True
+                          ).dropna(axis='columns', how='all')
 
         if _verbose is True:
             print(_df)
 
-        #option to build a hdf5 db as csv's are being parsed
+        # option to build a hdf5 db as csv's are being parsed
         if _db is True:
 
-            #this is done with the assumption that the 'symbols.h5'
+            # this is done with the assumption that the 'symbols.h5'
             # file has already been made
-            key = pd.read_hdf('symbols.h5', 'symbols')
-            if _symbol+_timeframe in key == False:
 
-                key = key.append(_symbol+_timeframe)
-                key.to_hdf('symbols.h5', key='symbols', mode='w', complevel=5,fletcher32=True)
-
-
-            _df.to_hdf('klines.h5', key=_symbol+_timeframe, mode='a', complevel=5,fletcher32=True)
+            if db_name is 'filepath':
+                print('[ERROR] Hdf5 db needs a filepath')
+                quit()
+            else:
+                _df.to_hdf(db_name + '.h5', key=_symbol + _timeframe, mode='a',
+                           complevel=5, fletcher32=True)
 
         return _df
     
