@@ -200,9 +200,6 @@ class DWX_ZeroMQ_Connector():
         # option to build a hdf5 db as csv's are being parsed
         if _db is True:
 
-            # this is done with the assumption that the 'symbols.h5'
-            # file has already been made
-
             if db_name is 'filepath':
                 print('[ERROR] Hdf5 db needs a filepath')
                 quit()
